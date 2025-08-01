@@ -2,7 +2,7 @@
 
 import { Client } from "@gradio/client";
 import Busboy from "busboy";
-import fetch from "node-fetch";   // npm install node-fetch@2
+// import fetch from "node-fetch";   // npm install node-fetch@2
 
 export const config = {
   api: {
