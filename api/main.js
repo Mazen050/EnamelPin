@@ -3,11 +3,11 @@
 import { Client } from "@gradio/client";
 
 // Disable Vercel’s default body parsing so we can get a raw Buffer
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+// export const config = {
+//   api: {
+//     bodyParser: false,
+//   },
+// };
 
 export default async function handler(req, res) {
   // Only POST allowed
