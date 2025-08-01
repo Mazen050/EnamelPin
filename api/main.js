@@ -1,35 +1,47 @@
-// api/upload.js
-
 import { Client } from "@gradio/client";
+import Busboy from "busboy";
 
-// Disable Vercel’s default body parsing so we can get a raw Buffer
-// export const config = {
-//   api: {
-//     bodyParser: false,
-//   },
-// };
+export const config = {
+  api: {
+    bodyParser: false, // we’ll handle the multipart ourselves
+  },
+};
 
 export default async function handler(req, res) {
-  // Only POST allowed
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  // Accumulate raw body chunks into a Buffer
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(chunk);
-  }
-  const imageBuffer = Buffer.concat(chunks);
+  // Parse the multipart form to pull out the file buffer
+  const bb = Busboy({ headers: req.headers });
+  let imageBuffer = null;
+  let contentType = "";
 
-  // Optional: get content-type header
-  const contentType = req.headers["content-type"] || "";
+  await new Promise((resolve, reject) => {
+    bb.on("file", (fieldname, fileStream, info) => {
+      const { filename, mimeType } = info;
+      contentType = mimeType;
+      const chunks = [];
+      fileStream.on("data", (chunk) => chunks.push(chunk));
+      fileStream.on("end", () => {
+        imageBuffer = Buffer.concat(chunks);
+        resolve();
+      });
+    });
+
+    bb.on("error", reject);
+    req.pipe(bb);
+  });
+
+  if (!imageBuffer) {
+    return res.status(400).json({ error: "No image file uploaded" });
+  }
 
   // Connect to your Gradio model
   const client = await Client.connect("black-forest-labs/FLUX.1-Kontext-Dev");
 
-  // Run inference, passing the raw Buffer as the blob
+  // Run inference
   const result = await client.predict("/infer", {
     input_image: imageBuffer,
     prompt: "put a texture on this club crest that makes it look like an enamel pin",
@@ -39,14 +51,12 @@ export default async function handler(req, res) {
     steps: 28,
   });
 
-  // Inspect or log the Gradio result
   console.log("Gradio output:", result.data);
 
-  // Return a JSON result
+  // Return the URL (or base64) that Gradio gave you
   return res.status(200).json({
     message: "Inference complete",
-    url: result.data[0].url,
-    // If result.data contains a URL or base64, include it here:
+    url: result.data?.[0]?.url ?? null,
     output: result.data,
     byteSize: imageBuffer.length,
     contentType,
