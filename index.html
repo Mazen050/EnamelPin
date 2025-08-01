@@ -146,10 +146,9 @@
           body: formData
         });
         if (!response.ok) throw new Error('Upload failed');
-        // Expect image bytes
-        const imgBlob = await response.imageDataURI.blob();
-        const imgUrl = URL.createObjectURL(imgBlob);
-        imgholder.innerHTML = `<img src="${imgUrl}" alt="Result" class="rounded-lg max-w-full" />`;
+        // Expect JSON with imageDataURI
+        const { imageDataURI } = await response.json();
+        imgholder.innerHTML = `<img src="${imageDataURI}" alt="Result" class="rounded-lg max-w-full" />`;
       } catch (err) {
         console.error(err);
         alert('Error uploading image');
