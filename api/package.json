@@ -1,6 +1,7 @@
 {
   "devDependencies": {
-    "@gradio/client": "^1.15.7"
+    "@gradio/client": "^1.15.7",
+    "busboy": "^1.6.0"
   },
   "type":"module"
 }
