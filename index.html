@@ -148,7 +148,10 @@
         if (!response.ok) throw new Error('Upload failed');
         const result = await response.json();
         // show server response if any
-        document.getElementById('imgholder').src = result.url;
+        const img = document.createElement("img")
+        img.src = result.url;
+
+        document.getElementById('imgholder').appendChild(img)
         document.getElementById('imgholder').textContent = 'Upload success!';
       } catch (err) {
         console.error(err);
