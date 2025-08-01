@@ -1,9 +1,12 @@
+// api/main.js
+
 import { Client } from "@gradio/client";
 import Busboy from "busboy";
+import fetch from "node-fetch";   // npm install node-fetch@2
 
 export const config = {
   api: {
-    bodyParser: false, // we’ll handle the multipart ourselves
+    bodyParser: false,
   },
 };
 
@@ -13,36 +16,29 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  // Parse the multipart form to pull out the file buffer
+  // 1) parse multipart form
   const bb = Busboy({ headers: req.headers });
-  let imageBuffer = null;
-  let contentType = "";
-
+  let imageBuffer = null, uploadMime = "";
   await new Promise((resolve, reject) => {
-    bb.on("file", (fieldname, fileStream, info) => {
-      const { filename, mimeType } = info;
-      contentType = mimeType;
-      const chunks = [];
-      fileStream.on("data", (chunk) => chunks.push(chunk));
-      fileStream.on("end", () => {
-        imageBuffer = Buffer.concat(chunks);
+    bb.on("file", (field, stream, info) => {
+      uploadMime = info.mimeType;
+      const parts = [];
+      stream.on("data", (c) => parts.push(c));
+      stream.on("end", () => {
+        imageBuffer = Buffer.concat(parts);
         resolve();
       });
     });
-
     bb.on("error", reject);
     req.pipe(bb);
   });
-
   if (!imageBuffer) {
-    return res.status(400).json({ error: "No image file uploaded" });
+    return res.status(400).json({ error: "No image uploaded" });
   }
 
-  // Connect to your Gradio model
+  // 2) run Gradio inference
   const client = await Client.connect("black-forest-labs/FLUX.1-Kontext-Dev");
-
-  // Run inference
-  const result = await client.predict("/infer", {
+  const { data } = await client.predict("/infer", {
     input_image: imageBuffer,
     prompt: "put a texture on this club crest that makes it look like an enamel pin",
     seed: 0,
@@ -51,14 +47,25 @@ export default async function handler(req, res) {
     steps: 28,
   });
 
-  console.log("Gradio output:", result.data);
+  // 3) data[0].url is the ephemeral URL — fetch it right away
+  const imgUrl = data?.[0]?.url;
+  if (!imgUrl) {
+    return res.status(500).json({ error: "No image URL from Gradio" });
+  }
 
-  // Return the URL (or base64) that Gradio gave you
+  const fetchResp = await fetch(imgUrl);
+  if (!fetchResp.ok) {
+    return res.status(502).json({ error: "Failed fetching Gradio image" });
+  }
+  const arrayBuffer = await fetchResp.arrayBuffer();
+  const outBuffer = Buffer.from(arrayBuffer);
+  const b64 = outBuffer.toString("base64");
+  const contentType = fetchResp.headers.get("content-type") || "image/png";
+
+  // 4) respond with a data-URI that never expires
   return res.status(200).json({
     message: "Inference complete",
-    url: result.data?.[0]?.url ?? null,
-    output: result.data,
-    byteSize: imageBuffer.length,
-    contentType,
+    imageDataURI: `data:${contentType};base64,${b64}`,
+    byteSize: outBuffer.length,
   });
 }
