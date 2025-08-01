@@ -1,24 +1,40 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Image Generator</title>
-  <!-- Tailwind CSS CDN -->
+  <!-- Tailwind CSS CDN with dark mode -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: {} }
+    }
+  </script>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-red-500 flex items-center justify-center p-6">
-  <div class="bg-white bg-opacity-80 backdrop-blur-md rounded-2xl shadow-2xl p-8 max-w-md w-full">
-    <h1 class="text-3xl font-extrabold text-gray-800 text-center mb-6">Generate Enamel Pin</h1>
-    <div class="flex flex-col space-y-4">
-      <label for="fileInput" class="flex flex-col items-center px-4 py-6 bg-white text-blue-500 rounded-lg shadow-lg tracking-wide uppercase border border-blue-500 cursor-pointer hover:bg-blue-50 transition">
-        <svg class="w-8 h-8 mb-2" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-          <path d="M16.88 9.94a3.5 3.5 0 1 1-5.66-4.34 3.5 3.5 0 0 1 5.66 4.34zM10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-11h-2v4H5l5 5 5-5h-4V7z" />
+<body class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-700 min-h-screen flex items-center justify-center p-6">
+  <div class="bg-gray-800 bg-opacity-80 backdrop-blur-md rounded-2xl shadow-2xl p-8 max-w-md w-full">
+    <h1 class="text-3xl font-extrabold text-white text-center mb-6">Generate Your Image</h1>
+    <div class="flex flex-col space-y-4" id="dropZone" tabindex="0">
+      <!-- File Upload -->
+      <label for="fileInput" class="flex flex-col items-center px-4 py-6 bg-gray-700 text-blue-400 rounded-lg shadow-lg tracking-wide uppercase border border-blue-500 cursor-pointer hover:bg-gray-600 transition">
+        <svg class="w-8 h-8 mb-2 text-blue-400" fill="currentColor" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+          <path d="M16.88 9.94a3.5 3.5 0 1 1-5.66-4.34 3.5 3.5 0 0 1 5.66 4.34zM10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm1-11h-2v4H5l5 5 5-5h-4V7z" />
         </svg>
-        <span id="fileLabel" class="mt-2 text-base leading-normal">Select an image</span>
+        <span id="fileLabel" class="mt-2 text-base leading-normal text-gray-200">Select an image or paste one</span>
         <input id="fileInput" type="file" accept="image/*" class="hidden" />
       </label>
-      <span id="fileName" class="text-sm text-gray-600 text-center"></span>
+      <span id="fileName" class="text-sm text-gray-400 text-center"></span>
+
+      <!-- URL Input -->
+      <div class="flex flex-col">
+        <label for="urlInput" class="text-gray-300 mb-1">Or enter image URL:</label>
+        <input id="urlInput" type="text" placeholder="https://example.com/image.jpg" class="px-4 py-2 bg-gray-700 text-gray-200 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        <span id="urlFeedback" class="text-sm text-gray-400 mt-1"></span>
+      </div>
+
+      <!-- Generate Button -->
       <button id="generateBtn" class="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition">
         Generate
       </button>
@@ -26,29 +42,108 @@
     <div id="imgholder" class="mt-6 flex justify-center"></div>
   </div>
 
-  <!-- Inline JS for file selection feedback -->
+  <!-- Inline JS for selection, URL, paste, and POST -->
   <script>
+    const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
+    const urlInput = document.getElementById('urlInput');
     const fileLabel = document.getElementById('fileLabel');
     const fileNameSpan = document.getElementById('fileName');
+    const urlFeedback = document.getElementById('urlFeedback');
+    const generateBtn = document.getElementById('generateBtn');
+    let pastedDataUrl = null;
 
+    // reset helper
+    function resetInputs(active) {
+      if (active !== 'file') fileNameSpan.textContent = '';
+      if (active !== 'url') urlFeedback.textContent = '';
+      if (active !== 'paste') pastedDataUrl = null;
+    }
+
+    // read DataURL
+    function readFileAsDataURL(file) {
+      return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // convert DataURL to Blob
+    function dataURLToBlob(dataURL) {
+      const [header, base64] = dataURL.split(',');
+      const mime = header.match(/:(.*?);/)[1];
+      const binary = atob(base64);
+      const array = [];
+      for (let i = 0; i < binary.length; i++) array.push(binary.charCodeAt(i));
+      return new Blob([new Uint8Array(array)], { type: mime });
+    }
+
+    // File selected
     fileInput.addEventListener('change', () => {
-      const file = fileInput.files[0];
-      if (file) {
+      resetInputs('file');
+      if (fileInput.files.length) {
         fileLabel.textContent = 'Image Selected';
-        fileNameSpan.textContent = file.name;
-      } else {
-        fileLabel.textContent = 'Select an image';
-        fileNameSpan.textContent = '';
+        fileNameSpan.textContent = fileInput.files[0].name;
       }
     });
 
-    document.getElementById('generateBtn').addEventListener('click', async () => {
-      if (!fileInput.files.length) {
-        alert('Please select an image first.');
-        return;
+    // URL entered
+    urlInput.addEventListener('input', () => {
+      resetInputs('url');
+      if (urlInput.value.trim()) urlFeedback.textContent = 'URL provided';
+    });
+
+    // Paste image
+    dropZone.addEventListener('paste', e => {
+      resetInputs('paste');
+      const items = e.clipboardData.items;
+      for (const item of items) {
+        if (item.type.includes('image')) {
+          const blob = item.getAsFile();
+          const reader = new FileReader();
+          reader.onload = () => {
+            pastedDataUrl = reader.result;
+            fileLabel.textContent = 'Image Pasted';
+            fileNameSpan.textContent = 'From Clipboard';
+            urlInput.value = '';
+          };
+          reader.readAsDataURL(blob);
+          break;
+        }
       }
-      // existing generate logic in main.js
+    });
+
+    // Generate & POST
+    generateBtn.addEventListener('click', async () => {
+      let blob;
+      if (urlInput.value.trim()) {
+        const resp = await fetch(urlInput.value.trim());
+        blob = await resp.blob();
+      } else if (fileInput.files.length) {
+        blob = fileInput.files[0];
+      } else if (pastedDataUrl) {
+        blob = dataURLToBlob(pastedDataUrl);
+      } else {
+        return alert('Please select, paste, or enter a URL for an image.');
+      }
+
+      const formData = new FormData();
+      formData.append('image', blob, 'upload.png');
+
+      try {
+        const response = await fetch('https://example.com', {
+          method: 'POST',
+          body: formData
+        });
+        if (!response.ok) throw new Error('Upload failed');
+        const result = await response.json();
+        // show server response if any
+        document.getElementById('imgholder').textContent = 'Upload success!';
+      } catch (err) {
+        console.error(err);
+        alert('Error uploading image');
+      }
     });
   </script>
 
