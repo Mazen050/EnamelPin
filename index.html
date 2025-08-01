@@ -147,7 +147,7 @@
         });
         if (!response.ok) throw new Error('Upload failed');
         // Expect image bytes
-        const imgBlob = await response.blob();
+        const imgBlob = await response.imageDataURI.blob();
         const imgUrl = URL.createObjectURL(imgBlob);
         imgholder.innerHTML = `<img src="${imgUrl}" alt="Result" class="rounded-lg max-w-full" />`;
       } catch (err) {
